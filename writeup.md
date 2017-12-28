@@ -116,7 +116,9 @@ __IOU (intersection over union metric):__
 ## 6. Project: Follow me
 
 [`model_training.ipynb` notebook](https://github.com/JasonYCHuang/RoboND-DeepLearning-Project/blob/master/result/model_training.ipynb)
+
 [HTML version of notebook](https://github.com/JasonYCHuang/RoboND-DeepLearning-Project/blob/master/result/model_training.html)
+
 [model and weights files](https://github.com/JasonYCHuang/RoboND-DeepLearning-Project/tree/master/result/model)
 
 In the project, the encoder block is a separable convolution layer with batch normalization. On the other hand, the decoder block is a bilinear upsampling layer with skip connections. In between, there is a 1x1 convolution layer. In my model, both encoder and decoder have 3 layers respectively.
