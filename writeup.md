@@ -9,10 +9,11 @@
 [fcn]: ./writeup-material/fcn.png
 [fcn-separable]: ./writeup-material/fcn-separable.png
 [fcn-iou]: ./writeup-material/fcn-iou.png
-[train]: ./writeup-material/train.png
 [follow_target]: ./writeup-material/follow_target.png
 [with_target]: ./writeup-material/with_target.png
 [without_target]: ./writeup-material/without_target.png
+[model-structure]: ./writeup-material/model-structure.png
+[curve]: ./writeup-material/curve.png
 
 ---
 
@@ -98,7 +99,7 @@ In classical convolutional layers, layers identify local features, but lose big 
 
 ![alt text][fcn]
 
-Classical CNN connects convolution layers to fully connected layers. The output of fully connected layers are a 2D tensor: `[batch, labels]`, and spatial information is lost. We can connect convolution layers to __1x1 convolution layers__. They output 4D tensors: `[batch, # of filters, height, width]`, which keep the spatial information. Besides, it makes our architecture deeper, and the operation is cheap, becuase it is only matrix multiplications.
+Classical CNN connects convolution layers to fully connected layers. The output of fully connected layers are a 2D tensor: `[batch, labels]`, and spatial information is lost. We can connect convolution layers to __1x1 convolution layers__. It outputs 4D tensors: `[batch, # of filters, height, width]`, which keep the spatial information. Meanwhile, we can modify filter space dimensionality. The coordinate-dependent transformation in the filter space is a cross-channel learning, and makes the model deeper[[1]](http://iamaaditya.github.io/2016/03/one-by-one-convolution/). The operation is cheap, becuase it is only matrix multiplications.
 
 __Bilinear upsampling__: Upsampling with interpolation method. Distance-dependent weight-average of 4 nearest known pixels.
 
@@ -115,27 +116,107 @@ __IOU (intersection over union metric):__
 
 ## 6. Project: Follow me
 
-[`model_training.ipynb` notebook](https://github.com/JasonYCHuang/RoboND-DeepLearning-Project/blob/master/result/model_training.ipynb)
+[You can find notebook / html / model and weights files here.](https://github.com/JasonYCHuang/RoboND-DeepLearning-Project/tree/master/result)
 
-[HTML version of notebook](https://github.com/JasonYCHuang/RoboND-DeepLearning-Project/blob/master/result/model_training.html)
+#### 6.1. The student clearly explains each layer of the network architecture and the role that it plays in the overall network. The student can demonstrate the benefits and/or drawbacks of different network architectures pertaining to this project and can justify the current network with factual data. Any choice of configurable parameters should also be explained in the network architecture.
 
-[model and weights files](https://github.com/JasonYCHuang/RoboND-DeepLearning-Project/tree/master/result/model)
+The following code and figure show the structure of the model.
 
-In the project, the encoder block is a separable convolution layer with batch normalization. On the other hand, the decoder block is a bilinear upsampling layer with skip connections. In between, there is a 1x1 convolution layer. In my model, both encoder and decoder have 3 layers respectively.
+```
+def fcn_model(inputs, num_classes):
+    
+    # TODO Add Encoder Blocks. 
+    ec_1 = encoder_block(inputs, 32, 2)
+    ec_2 = encoder_block(ec_1, 48, 2)
+    ec_3 = encoder_block(ec_2, 64, 2)
+    
+    # TODO Add 1x1 Convolution layer using conv2d_batchnorm().
+    conv_1x1 = conv2d_batchnorm(ec_3, 64, 1, 1)
+    
+    # TODO: Add the same number of Decoder Blocks as the number of Encoder Blocks
+    dc_3 = decoder_block(conv_1x1, ec_2, 64)
+    dc_2 = decoder_block(dc_3, ec_1, 48)
+    dc_1 = decoder_block(dc_2, inputs, 32)
+    
+    x = dc_1
+    
+    # The function returns the output layer of your model. 
+    # "x" is the final layer obtained from the last decoder_block()
+    return layers.Conv2D(num_classes, 1, activation='softmax', padding='same')(x)
+```
 
-__Hyperparameters__ 
+![alt text][model-structure]
+
+__Encoder blocks (ec_1, ec_2, ec_3):__ Layers are constructed by separable convolution layers with batch normalizations. These are classical convolutional layers with modifications. Therefore, each layers can extract different features to learn target information. As layers go deeper, more complex features can be focused. Numbers of filters also increase as layers go deeper.
+
+- Separable convolution layers decrease the number of parameters, and it also make training with less memory. A more detail explanation is in section 5.
+
+- Batch normalizations reshape loss function to zero mean and small variance, which avoid search through all parameter space, and decrease time to reach the target.
+
+__Decoder blocks (dc_1, dc_2, dc_3):__ These blocks restored original image spatial information, and integrate identified pixels for different objects and background. To expand compressed encoder blocks, layers are constructed by bilinear upsampling layers. Upsampling layers take 4 nearest known pixels, and calculate distance-dependent weight-average values base on the interpolation method. Numbers of filters also decrease as layers are close to the output.
+
+Meanwhile, skip connections are added to add information with multi resolutions. They pass original higher level spatial information into the next layer which help the model using both local features from classical convolutional layers and global views from skip connections.
+
+
+#### 6.2. The student is able to identify the use of various reasons for encoding / decoding images, when it should be used, why it is useful, and any problems that may arise.
+
+In classical CNN, the model identify classes or targets by looking at specific features. As a result, classical CNN __converts input images into feature vectors__, and this is __encoding__.
+
+On the other hand, __decoding__ is a process to __generate a semantic segmentation masek and restore feature vectors back to images with learned information__. In our case, the learned information is different pixels for target, other objects and background.
+
+In layers, the `stride = 2` down-sampling results in the lose of information, but skip connections amends this. Moreover, the 1x1 convolution layer avoids spatial infomration lose when using a fully connected layer between encoder and decoder.
+
+
+#### 6.3. The student demonstrates a clear understanding of 1 by 1 convolutions and where/when/how it should be used.
+
+The 1 by 1 convolution outputs 4D tensors: `[batch, # of filters, height, width]`, which keeps the spatial information. Meanwhile, we can modify filter space dimensionality. This transformation in the filter space is a cross-channel learning, and makes the model deeper[[1]](http://iamaaditya.github.io/2016/03/one-by-one-convolution/). The operation is cheap, becuase it is only matrix multiplications.
+
+
+#### 6.4. The student explains their neural network parameters including the values selected and how these values were obtained (i.e. how was hyper tuning performed? Brute force, etc.)
 
 In order to increase IOU, I need to increase the capacity of training set to 6592. 
 
 Larger `batch_size` can represent more infomation of the whole dataset. However, when I increase `batch_size` to 128, my GPU is running out of memory. Meanwhile, smaller `batch_size` will lead to a lower accuracy, since a small batch can not provide enough information linking to the whole dataset. I set 64 for `batch_size`.
 
-__Results__ 
+`Learning rate` is base on previous exerience, and I didn't make more manual tunning since the final IOU reaches 40%. Besides, I also implement learning rate decay described in this post[[2]](https://machinelearningmastery.com/using-learning-rate-schedules-deep-learning-models-python-keras/). This provides fast learning in the beginning because larger steps, and approaches the target with smaller steps in the later stage without bouncing back and forth around it because of large steps.
 
-The training curve shows no sign of overfitting.
+`epochs` is set to 100. In the beginning, I expected overfitting present when loss starts to increase. However, the curve only reaches a steady region. Therefore, I pick a model checkpoint with lowest loss.
 
-![alt text][train]
+![alt text][curve]
 
-Images while following the target can be identified correctly, and there are some misclassified pixels around dark wall.
+```
+num_training_samples = 6592
+num_valid_samples = 1185
+
+batch_size = 64
+num_epochs = 100
+learning_rate = 0.1
+decay_rate = learning_rate / num_epochs
+
+steps_per_epoch = num_training_samples/batch_size
+validation_steps = num_valid_samples/batch_size
+workers = 4
+```
+
+The following line is modified to implement learning rate decay.
+
+```
+model.compile(optimizer=keras.optimizers.Adam(lr=learning_rate, decay=decay_rate), loss='categorical_crossentropy')
+```
+
+#### 6.5. The student is able to clearly articulate whether this model and data would work well for following another object (dog, cat, car, etc.) instead of a human and if not, what changes would be required.
+
+In the mask, we highlight target as blue, other objects as green and back ground as red. If we want to follow another project, we need to change blue pixels to the target which we want, and re-train the model parameters. This means the dataset needs to be modified. 
+
+On the otherhand, The FCN structure could be kept as the same. Then, the re-train process will optimize weight and bias for the new target.
+
+#### 6.6. Results
+
+The training curve:
+
+![alt text][curve]
+
+Images while following the target can be identified correctly. In the target boundary, there are few pixels misclassified.
 
 ![alt text][follow_target]
 
@@ -143,13 +224,24 @@ Images while at patrol without target can be identified correctly, and there are
 
 ![alt text][without_target]
 
-Images while at patrol with target show partial identifications, and target pixels are mixed with other people.
+Images while at patrol with target show partial identifications.
 
 ![alt text][with_target]
 
-The final IOU is 0.425. 
-
-In this project, I haven't implement momentum and learning rate decay. Moreover, filter sizes can be adjusted. These will be the future work.
+The final IOU is 0.467. 
 
 
+## Future Enhancements
 
+- Implement momentum.
+
+- Adjust filter sizes.
+
+- Base on review feedbacks: The current training set is heavily biased towards background data. Creating an equal amount of background images, images with hero near and images with the hero away will solve this issue.
+
+
+## Further reading
+
+https://courses.cs.washington.edu/courses/cse576/17sp/notes/Sachin_Talk.pdf
+
+https://leonardoaraujosantos.gitbooks.io/artificial-inteligence/content/image_segmentation.html
